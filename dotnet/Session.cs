@@ -827,7 +827,7 @@ namespace WinSCP
                 _process.StdIn = stream ?? throw Logger.WriteException(new ArgumentNullException(nameof(stream)));
                 try
                 {
-                    remoteFilePath = RemotePath.EscapeFileMask(remoteFilePath);
+                    remoteFilePath = RemotePath.EscapeOperationMask(remoteFilePath);
                     TransferOperationResult operationResult = DoPutFiles("-", remoteFilePath, false, options);
                     operationResult.Check();
                     // Assert that any transfer took place at all
@@ -850,7 +850,7 @@ namespace WinSCP
                 }
 
                 string localDirectory = Path.GetDirectoryName(localFilePath);
-                string filemask = RemotePath.EscapeFileMask(Path.GetFileName(localFilePath));
+                string filemask = Path.GetFileName(localFilePath);
 
                 TransferOperationResult operationResult = PutFilesToDirectory(localDirectory, remoteDirectory, filemask, remove, options);
                 operationResult.Check();
@@ -1090,6 +1090,11 @@ namespace WinSCP
                     operationResultGuard = RegisterOperationResult(result);
                     progressHandler = CreateProgressHandler();
 
+                    if (_throwStdOut)
+                    {
+                        throw Logger.WriteException(new InvalidOperationException());
+                    }
+                    _throwStdOut = true;
                     bool downloadFound;
                     try
                     {
@@ -1101,6 +1106,10 @@ namespace WinSCP
                     catch (StdOutException)
                     {
                         downloadFound = true;
+                    }
+                    finally
+                    {
+                        _throwStdOut = false;
                     }
                     if (downloadFound)
                     {
@@ -2277,9 +2286,10 @@ namespace WinSCP
                 throw Logger.WriteException(new SessionLocalException(this, "Aborted."));
             }
 
-            if ((_process.StdOut != null) && _process.StdOut.ReadAvailable(1))
+            if (_throwStdOut && (_process.StdOut != null) && _process.StdOut.ReadAvailable(1))
             {
-                throw new StdOutException();
+                // This is here to return from GetFile asap (?)
+                throw Logger.WriteException(new StdOutException());
             }
         }
 
@@ -2789,5 +2799,6 @@ namespace WinSCP
         private bool _ignoreFailed;
         private TimeSpan _sessionTimeout;
         private QueryReceivedEventHandler _queryReceived;
+        private bool _throwStdOut;
     }
 }
